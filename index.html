@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cracking the Candy Code</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-annotation/2.5.1/d3-annotation.min.js"></script>
+    <style>
+      body {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background-color: #f9f9f9;
+        color: #383838;
+      }
+      #main-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        max-width: 750px;
+        margin: 20px;
+        background-color: #fff;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+      #visualization {
+        width: 95%;
+      }
+      #narrative {
+        padding: 20px 30px;
+        width: 95%;
+        border-top: 1px solid #e8e8e8;
+      }
+      #narrative h2 {
+        color: #383838;
+        margin-top: 0;
+      }
+      #narrative p {
+        line-height: 1.5;
+        max-width: 95%;
+      }
+      #controls {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 1em;
+        cursor: pointer;
+        border: none;
+        border-radius: 5px;
+        background-color: #2e9ae2;
+        color: white;
+        transition: background-color 0.3s, transform 0.2s;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      button:hover {
+        background-color: #2e9ae2;
+      }
+      button:disabled {
+        background-color: #b0c7d7;
+        cursor: not-allowed;
+        transform: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Cracking the Candy Code: What makes a great candy?</h1>
+
+    <div id="main-container">
+      <div id="visualization"></div>
+      <div id="narrative">
+        <h2 id="scene-title"></h2>
+        <p id="scene-text"></p>
+      </div>
+    </div>
+
+    <div id="controls">
+      <button id="prev-btn" disabled>Previous</button>
+      <button id="next-btn">Next</button>
+    </div>
+
+    <script>
+      let sceneIndex = 0;
+      let candyData = [];
+
+      const scenes = [
+        {
+          title: "Is at simple as sugar?",
+          text: "A common assumption is that the more sugar a candy has, the better it tastes. Here we see that while there is some correlation, it isn't as pronounced as we might have thought. This begs the question, If not sugar, what really drives a great candy?",
+          update: sugarScene,
+        },
+        {
+          title: "Fruit is Fraught",
+          text: "Here we highlight candies which contain fruit. While some candies like Starburst and Skittles are still successful, it's clear that fruit flavored candies often fall flat",
+          update: fruitScene,
+        },
+        {
+          title: "Chocolate is Champion",
+          text: "Here we highlight candies which contain chocolate. It's clear that candies containing chocolate dominate the top of the rating scale.",
+          update: chocolateScene,
+        },
+        {
+          title: "Mix ins are a must",
+          text: "Now we further refine our highlight to candies which contain chocolate and either peanut butter, almonds, or caramel. Besides Kit-Kats, all of the top Candies meet this criteria",
+          update: mixinsScene,
+        },
+      ];
+
+      const margin = { top: 60, right: 60, bottom: 80, left: 60 };
+      const width = 750 - margin.left - margin.right;
+      const height = 750 - margin.top - margin.bottom;
+
+      const svg = d3
+        .select("#visualization")
+        .append("svg")
+        .attr(
+          "viewBox",
+          `0 0 ${width + margin.left + margin.right} ${
+            height + margin.top + margin.bottom
+          }`
+        )
+        .append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const x = d3.scaleLinear().range([0, width]);
+      const y = d3.scaleLinear().range([height, 0]);
+
+      const xAxis = svg.append("g").attr("transform", `translate(0,${height})`);
+      const yAxis = svg.append("g");
+
+      svg
+        .append("text")
+        .attr("class", "axis-label")
+        .attr("text-anchor", "middle")
+        .attr("x", width / 2)
+        .attr("y", height + margin.top)
+        .text("Sugar Content Percentile");
+
+      svg
+        .append("text")
+        .attr("class", "axis-label")
+        .attr("text-anchor", "middle")
+        .attr("transform", "rotate(-90)")
+        .attr("y", -margin.left + 20)
+        .attr("x", -height / 2)
+        .text("Head to Head Win Percentage");
+
+      const tooltip = d3
+        .select("body")
+        .append("div")
+        .attr(
+          "style",
+          "position: absolute; visibility: hidden; background: #fff; border: 1px solid #ccc; padding: 8px; border-radius: 4px; font-size: 12px;"
+        );
+
+      d3.csv("candy-data.csv", (d) => {
+        return {
+          competitorname: d.competitorname,
+          chocolate: +d.chocolate,
+          fruity: +d.fruity,
+          caramel: +d.caramel,
+          peanutyalmondy: +d.peanutyalmondy,
+          nougat: +d.nougat,
+          crispedricewafer: +d.crispedricewafer,
+          hard: +d.hard,
+          bar: +d.bar,
+          pluribus: +d.pluribus,
+          sugarpercent: +d.sugarpercent * 100,
+          pricepercent: +d.pricepercent,
+          winpercent: +d.winpercent,
+        };
+      }).then((data) => {
+        x.domain([0, 100]);
+        y.domain([
+          d3.min(data, (d) => d.winpercent) - 5,
+          d3.max(data, (d) => d.winpercent) + 5,
+        ]);
+
+        xAxis.call(d3.axisBottom(x));
+        yAxis.call(d3.axisLeft(y));
+
+        candyData = data;
+
+        updateScene();
+      });
+
+      function clearAnnotations() {
+        svg.selectAll(".annotation-group").remove();
+      }
+
+      function addTooltipEvents() {
+        svg
+          .selectAll(".dot")
+          .on("mouseover", (event, d) => {
+            tooltip.style("visibility", "visible").html(
+              `<strong>${d.competitorname}</strong>
+                <br>Sugar Percentile: ${d.sugarpercent.toFixed(2)}
+                <br>Win Percent: ${d.winpercent.toFixed(2)}
+                <br>Is Fruit Flavored: ${d.fruity}
+                <br>Is Chocolate: ${d.chocolate}
+                <br>Has Mixins: ${d.caramel || d.peanutyalmondy}
+            `
+            );
+          })
+          .on("mousemove", (event) => {
+            tooltip
+              .style("top", event.pageY - 10 + "px")
+              .style("left", event.pageX + 10 + "px");
+          })
+          .on("mouseout", () => {
+            tooltip.style("visibility", "hidden");
+          });
+      }
+
+      function sugarScene() {
+        clearAnnotations();
+
+        const dots = svg
+          .selectAll(".dot")
+          .data(candyData, (d) => d.competitorname);
+
+        dots
+          .enter()
+          .append("circle")
+          .attr("class", "dot")
+          .attr("cx", (d) => x(d.sugarpercent))
+          .attr("cy", (d) => y(d.winpercent))
+          .attr("r", 5)
+          .attr("fill", "#2e9ae2")
+          .attr("opacity", 0.7)
+          .merge(dots)
+          .transition()
+          .duration(500)
+          .attr("fill", "#2e9ae2")
+          .attr("r", 5)
+          .attr("opacity", 0.7);
+
+        const type = d3.annotationCallout;
+        const annotations = [
+          {
+            note: {
+              label:
+                "Being high in sugar doesn't always lead to a preferred candy",
+              title: "Sugar isn't a silver bullet",
+              wrap: 180,
+            },
+            x: x(96),
+            y: y(33),
+            dy: 40,
+            dx: -20,
+          },
+          {
+            note: {
+              label:
+                "One of the most popular candies is comparatively low in sugar",
+              title: "No Sugar? No Problem",
+              wrap: 180,
+            },
+            x: x(3.4),
+            y: y(81.87),
+            dy: -20,
+            dx: 20,
+          },
+        ];
+        const makeAnnotations = d3
+          .annotation()
+          .annotations(annotations)
+          .type(type);
+        svg.append("g").attr("class", "annotation-group").call(makeAnnotations);
+
+        addTooltipEvents();
+      }
+
+      function chocolateScene() {
+        clearAnnotations();
+
+        const highlight = (d) => d.chocolate === 1;
+
+        svg
+          .selectAll(".dot")
+          .transition()
+          .duration(500)
+          .attr("fill", (d) => (highlight(d) ? "#e67e22" : "#bdc3c7"))
+          .attr("r", (d) => (highlight(d) ? 6 : 4))
+          .attr("opacity", (d) => (highlight(d) ? 0.9 : 0.4));
+
+        const annotations = [
+          {
+            note: {
+              label:
+                "Every Candy with a Head to Head win percentage over 70% contains chocolate",
+              title: "King Chocolate",
+              wrap: 150,
+            },
+            x: x(60),
+            y: y(70),
+            dy: 0,
+            dx: -200,
+          },
+        ];
+        const makeAnnotations = d3
+          .annotation()
+          .annotations(annotations)
+          .type(d3.annotationCallout);
+        svg.append("g").attr("class", "annotation-group").call(makeAnnotations);
+
+        addTooltipEvents();
+      }
+
+      function mixinsScene() {
+        clearAnnotations();
+
+        const highlight = (d) =>
+          d.chocolate === 1 && (d.peanutyalmondy === 1 || d.caramel === 1);
+
+        svg
+          .selectAll(".dot")
+          .transition()
+          .duration(500)
+          .attr("fill", (d) => (highlight(d) ? "#e67e22" : "#bdc3c7"))
+          .attr("r", (d) => (highlight(d) ? 6 : 4))
+          .attr("opacity", (d) => (highlight(d) ? 0.9 : 0.4));
+
+        // Add annotation for scene 2
+        const annotations = [
+          {
+            note: {
+              label:
+                "Reese's Peanut Butter Cups won the most head to head matches",
+              title: "The Winner",
+              wrap: 150,
+            },
+            x: x(72),
+            y: y(84),
+            dy: 10,
+            dx: 50,
+          },
+        ];
+        const makeAnnotations = d3
+          .annotation()
+          .annotations(annotations)
+          .type(d3.annotationCallout);
+        svg.append("g").attr("class", "annotation-group").call(makeAnnotations);
+
+        addTooltipEvents();
+      }
+
+      function fruitScene() {
+        clearAnnotations();
+
+        const hasFruit = (d) => d.fruity === 1;
+
+        svg
+          .selectAll(".dot")
+          .transition()
+          .duration(500)
+          .attr("fill", (d) => (hasFruit(d) ? "#27ae60" : "#bdc3c7"))
+          .attr("r", (d) => (hasFruit(d) ? 6 : 4))
+          .attr("opacity", (d) => (hasFruit(d) ? 0.9 : 0.4));
+
+        const annotations = [
+          {
+            note: {
+              label: "The least preferred candies are generally fruit flavored",
+              title: "The Losers",
+              wrap: 160,
+            },
+            x: x(13),
+            y: y(24),
+            dy: -30,
+            dx: 80,
+          },
+          {
+            note: {
+              label:
+                "Some fruit flavored candies, like Starburst, are still successful",
+              title: "Not all bad",
+              wrap: 160,
+            },
+            x: x(15),
+            y: y(67),
+            dy: -30,
+            dx: 0,
+          },
+        ];
+        const makeAnnotations = d3
+          .annotation()
+          .annotations(annotations)
+          .type(d3.annotationCallout);
+        svg.append("g").attr("class", "annotation-group").call(makeAnnotations);
+
+        addTooltipEvents();
+      }
+
+      function updateScene() {
+        const scene = scenes[sceneIndex];
+        d3.select("#scene-title").text(scene.title);
+        d3.select("#scene-text").text(scene.text);
+        scene.update();
+
+        d3.select("#prev-btn").property("disabled", sceneIndex === 0);
+        d3.select("#next-btn").property(
+          "disabled",
+          sceneIndex === scenes.length - 1
+        );
+      }
+
+      d3.select("#next-btn").on("click", () => {
+        if (sceneIndex < scenes.length - 1) {
+          sceneIndex++;
+          updateScene();
+        }
+      });
+
+      d3.select("#prev-btn").on("click", () => {
+        if (sceneIndex > 0) {
+          sceneIndex--;
+          updateScene();
+        }
+      });
+    </script>
+  </body>
+</html>
